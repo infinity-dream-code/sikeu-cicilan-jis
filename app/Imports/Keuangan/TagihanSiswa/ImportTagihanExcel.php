@@ -14,12 +14,21 @@ class ImportTagihanExcel implements ToCollection, WithHeadingRow
     public const CACHE_KEY = 'import_tagihan_excel';
 
     public const REQUIRED_COLUMNS = [
-        'nocust',
+        'nis',
         'nominal',
-        'nmtagihan',
-        'billperiod',
-        'bta',
-        'isnyicil',
+        'namatagihan',
+        'periode',
+        'tahunakademik',
+        'cicil',
+    ];
+
+    public const COLUMN_LABELS = [
+        'nis' => 'NIS',
+        'nominal' => 'Nominal',
+        'namatagihan' => 'Nama Tagihan',
+        'periode' => 'Periode',
+        'tahunakademik' => 'Tahun Akademik',
+        'cicil' => 'Cicil',
     ];
 
     public function __construct(public ?string $sekolah = null)
@@ -45,14 +54,14 @@ class ImportTagihanExcel implements ToCollection, WithHeadingRow
 
             if ($nocust === '') {
                 $rowData['status'] = 0;
-                $statusKet[] = 'NOCUST tidak boleh kosong';
+                $statusKet[] = 'NIS tidak boleh kosong';
             } else {
                 $siswa = scctcust::where('NOCUST', $nocust);
                 SchoolScope::apply($siswa, 'scctcust', $this->sekolah);
                 $siswa = $siswa->first();
                 if (!$siswa) {
                     $rowData['status'] = 0;
-                    $statusKet[] = "NOCUST {$nocust} tidak ditemukan";
+                    $statusKet[] = "NIS {$nocust} tidak ditemukan";
                 }
             }
 
@@ -60,38 +69,38 @@ class ImportTagihanExcel implements ToCollection, WithHeadingRow
             $rowData['nominal'] = $nominal;
             if ($nominal === null || $nominal <= 0) {
                 $rowData['status'] = 0;
-                $statusKet[] = 'NOMINAL tidak boleh kosong / harus lebih dari 0';
+                $statusKet[] = 'Nominal tidak boleh kosong / harus lebih dari 0';
             }
 
             $nmTagihan = $this->excelString($rowData['nmtagihan'] ?? null);
             $rowData['nmtagihan'] = $nmTagihan;
             if ($nmTagihan === '') {
                 $rowData['status'] = 0;
-                $statusKet[] = 'NMTagihan tidak boleh kosong';
+                $statusKet[] = 'Nama tagihan tidak boleh kosong';
             } elseif (mb_strlen($nmTagihan) > 30) {
                 $rowData['status'] = 0;
-                $statusKet[] = 'NMTagihan maksimal 30 karakter';
+                $statusKet[] = 'Nama tagihan maksimal 30 karakter';
             }
 
             $billPeriod = $this->excelString($rowData['billperiod'] ?? null);
             $rowData['billperiod'] = $billPeriod;
             if ($billPeriod === '') {
                 $rowData['status'] = 0;
-                $statusKet[] = 'BILLPERIOD tidak boleh kosong';
+                $statusKet[] = 'Periode tidak boleh kosong';
             }
 
             $bta = $this->excelString($rowData['bta'] ?? null);
             $rowData['bta'] = $bta;
             if ($bta === '') {
                 $rowData['status'] = 0;
-                $statusKet[] = 'BTA tidak boleh kosong';
+                $statusKet[] = 'Tahun akademik tidak boleh kosong';
             }
 
             $isNyicil = $this->excelString($rowData['isnyicil'] ?? null);
             $rowData['isnyicil'] = $isNyicil;
             if ($isNyicil === '') {
                 $rowData['status'] = 0;
-                $statusKet[] = 'isNYICIL tidak boleh kosong';
+                $statusKet[] = 'Cicil tidak boleh kosong';
             }
 
             $rowData['keterangan'] = $statusKet === [] ? null : implode(', ', $statusKet);
@@ -120,12 +129,12 @@ class ImportTagihanExcel implements ToCollection, WithHeadingRow
         }
 
         $aliases = [
-            'nocust' => ['nocust', 'no_cust', 'nis'],
+            'nocust' => ['nis', 'nocust'],
             'nominal' => ['nominal'],
-            'nmtagihan' => ['nmtagihan', 'nm_tagihan', 'nama_tagihan'],
-            'billperiod' => ['billperiod', 'bill_period'],
-            'bta' => ['bta'],
-            'isnyicil' => ['isnyicil', 'is_nyicil'],
+            'nmtagihan' => ['namatagihan', 'nmtagihan'],
+            'billperiod' => ['periode', 'billperiod'],
+            'bta' => ['tahunakademik', 'bta'],
+            'isnyicil' => ['cicil', 'isnyicil'],
         ];
 
         $mapped = [];

@@ -50,7 +50,7 @@
             <div class="card-title">
                 <h5 class="mb-0">{{ $dataTitle ?? $mainTitle }}</h5>
                 <div class="text-muted small mt-1">
-                    Kolom Excel: NOCUST, NOMINAL, NMTagihan, BILLPERIOD, BTA, isNYICIL
+                    Kolom Excel: NIS, Nominal, Nama Tagihan, Periode, Tahun Akademik, Cicil
                 </div>
             </div>
             <div class="card-header-elements ms-auto">
@@ -98,7 +98,7 @@
                         <ul class="list-group list-group-timeline mb-3">
                             <li class="list-group-item list-group-timeline-danger">File harus berformat <span class="fw-bold">XLS/XLSX</span>.</li>
                             <li class="list-group-item list-group-timeline-danger">Ukuran file tidak boleh lebih dari <span class="fw-bold">1024KB/1MB</span>.</li>
-                            <li class="list-group-item list-group-timeline-danger">Kolom yang harus terisi: <span class="fw-bold">NOCUST, NOMINAL, NMTagihan, BILLPERIOD, BTA, isNYICIL</span>.</li>
+                            <li class="list-group-item list-group-timeline-danger">Kolom yang harus terisi: <span class="fw-bold">NIS, NOMINAL, NAMA_TAGIHAN, PERIODE, TAHUN_AKADEMIK, CICIL</span>.</li>
                             <li class="list-group-item list-group-timeline-danger">Contoh file yang dapat diproses untuk import:
                                 <a class="btn btn-sm btn-outline-primary fw-bolder"
                                    href="{{asset('contoh_excel/TEMPLATE INPUT TAGIHAN.xlsx')}}">

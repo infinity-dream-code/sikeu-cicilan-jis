@@ -50,14 +50,14 @@ class UploadTagihanExcelController extends Controller
     public function getColumn()
     {
         return [
-            ['data' => null, 'name' => 'no', 'className' => 'text-center', 'columnType' => 'row'],
-            ['data' => 'nis', 'name' => 'NOCUST', 'searchable' => true, 'orderable' => true],
-            ['data' => 'name', 'name' => 'NAMA', 'searchable' => true, 'orderable' => true],
-            ['data' => 'nmtagihan', 'name' => 'NMTagihan', 'searchable' => true, 'orderable' => true],
-            ['data' => 'billperiod', 'name' => 'BILLPERIOD', 'searchable' => true, 'orderable' => true],
-            ['data' => 'bta', 'name' => 'BTA', 'searchable' => true, 'orderable' => true],
-            ['data' => 'isnyicil', 'name' => 'isNYICIL', 'searchable' => true, 'orderable' => true, 'className' => 'text-center'],
-            ['data' => 'nominal', 'name' => 'NOMINAL', 'searchable' => true, 'orderable' => true, 'columnType' => 'currency'],
+            ['data' => null, 'name' => 'No', 'className' => 'text-center', 'columnType' => 'row'],
+            ['data' => 'nis', 'name' => 'NIS', 'searchable' => true, 'orderable' => true],
+            ['data' => 'name', 'name' => 'Nama', 'searchable' => true, 'orderable' => true],
+            ['data' => 'nmtagihan', 'name' => 'Nama Tagihan', 'searchable' => true, 'orderable' => true],
+            ['data' => 'billperiod', 'name' => 'Periode', 'searchable' => true, 'orderable' => true],
+            ['data' => 'bta', 'name' => 'Tahun Akademik', 'searchable' => true, 'orderable' => true],
+            ['data' => 'isnyicil', 'name' => 'Cicil', 'searchable' => true, 'orderable' => true, 'className' => 'text-center'],
+            ['data' => 'nominal', 'name' => 'Nominal', 'searchable' => true, 'orderable' => true, 'columnType' => 'currency'],
             ['data' => 'status', 'name' => 'Status', 'searchable' => true, 'orderable' => true, 'columnType' => 'importstatus'],
             ['data' => 'keterangan', 'name' => 'Keterangan', 'searchable' => true, 'orderable' => true],
             ['data' => 'unit', 'name' => 'Unit', 'searchable' => true, 'orderable' => true],
@@ -140,7 +140,7 @@ class UploadTagihanExcelController extends Controller
             $requiredColumns = ImportTagihanExcel::REQUIRED_COLUMNS;
             $missingColumns = [];
             foreach ($requiredColumns as $column) {
-                if (!in_array($column, $headings, true) && !($column === 'nocust' && in_array('nis', $headings, true))) {
+                if (!in_array($column, $headings, true)) {
                     $missingColumns[] = $column;
                 }
             }
@@ -156,7 +156,7 @@ class UploadTagihanExcelController extends Controller
 
             $data = Cache::get($this->cacheKey, []);
             if (empty($data)) {
-                throw new \Exception('File berhasil dibaca, tetapi tidak ada baris data yang dapat diproses. Pastikan file berisi NOCUST dan Nominal.');
+                throw new \Exception('File berhasil dibaca, tetapi tidak ada baris data yang dapat diproses. Pastikan file berisi NIS dan Nominal.');
             }
 
             Log::info('Upload tagihan excel berhasil', [
@@ -217,7 +217,7 @@ class UploadTagihanExcelController extends Controller
                 SchoolScope::apply($siswa, 'scctcust', $this->sekolah);
                 $siswa = $siswa->first();
                 if (!$siswa) {
-                    return response()->json(['message' => "Siswa dengan NOCUST {$nocust} tidak ditemukan."], 422);
+                    return response()->json(['message' => "Siswa dengan NIS {$nocust} tidak ditemukan."], 422);
                 }
 
                 if ((int) ($siswa->STCUST ?? 0) === 0) {
@@ -263,14 +263,14 @@ class UploadTagihanExcelController extends Controller
 
     private function displayColumn(string $column): string
     {
-        return match ($column) {
-            'nocust' => 'NOCUST',
-            'nominal' => 'NOMINAL',
-            'nmtagihan' => 'NMTagihan',
-            'billperiod' => 'BILLPERIOD',
-            'bta' => 'BTA',
-            'isnyicil' => 'isNYICIL',
-            default => strtoupper($column),
-        };
+        return ImportTagihanExcel::COLUMN_LABELS[$column]
+            ?? match ($column) {
+                'nocust' => 'NIS',
+                'nmtagihan' => 'Nama Tagihan',
+                'billperiod' => 'Periode',
+                'bta' => 'Tahun Akademik',
+                'isnyicil' => 'Cicil',
+                default => ucwords(str_replace('_', ' ', $column)),
+            };
     }
 }
