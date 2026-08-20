@@ -4,9 +4,7 @@ namespace App\Http\Controllers\Admin\MasterData;
 
 use App\Http\Controllers\Controller;
 use App\Imports\MasterData\ImportDataSiswa;
-use App\Models\mst_kelas;
 use App\Models\mst_sekolah;
-use App\Models\mst_thn_aka;
 use App\Models\scctcust;
 use App\Models\ValidationMessage;
 use App\Support\InputSiswaProcedure;
@@ -235,14 +233,16 @@ class ExportImportDataController extends Controller
             }
         }
 
+        $connection = DB::connection('DATA_MYSQL');
+
         try {
-            DB::connection('DATA_MYSQL')->beginTransaction();
+            if ($request->metode != '1') {
+                $connection->beginTransaction();
+            }
 
             if ($request->metode == '1') {
                 $invalidCount = collect($data)->where('status', 0)->count();
                 if ($invalidCount > 0) {
-                    DB::connection('DATA_MYSQL')->rollBack();
-
                     return response()->json([
                         'message' => "Ada {$invalidCount} baris bermasalah. Perbaiki data di kolom Keterangan terlebih dahulu.",
                     ], 422);
@@ -250,8 +250,6 @@ class ExportImportDataController extends Controller
 
                 $rows = array_filter($data, fn ($item) => !empty($item['nis'] ?? null));
                 if (empty($rows)) {
-                    DB::connection('DATA_MYSQL')->rollBack();
-
                     return response()->json(['message' => 'Tidak ada baris dengan NIS yang dapat disimpan'], 422);
                 }
 
@@ -263,25 +261,13 @@ class ExportImportDataController extends Controller
                         continue;
                     }
 
-                    $thnAka = mst_thn_aka::where('thn_aka', $item['angkatan'])->first();
-                    $kelas = mst_kelas::findForImport($item['unit'], $item['kelas'], $item['kelompok']);
-
-                    if (!$thnAka || !$kelas) {
-                        DB::connection('DATA_MYSQL')->rollBack();
-
-                        return response()->json([
-                            'message' => 'Silahkan periksa kembali kelas/tahun akademik siswa',
-                            'nis' => $nis,
-                            'thn_aka' => $thnAka,
-                            'kelas' => $kelas,
-                        ], 422);
-                    }
-
                     InputSiswaProcedure::call(
                         $nis,
                         (string) ($item['nama'] ?? ''),
-                        $kelas,
-                        $sekolah,
+                        (string) ($item['kelas'] ?? ''),
+                        (string) ($item['unit'] ?? ''),
+                        (string) ($sekolah->CODE01 ?? ''),
+                        (string) ($item['kelompok'] ?? ''),
                         (string) ($item['angkatan'] ?? ''),
                         $item['alamat'] ?? null,
                         $item['gender'] ?? null,
@@ -292,14 +278,15 @@ class ExportImportDataController extends Controller
                 }
 
                 if ($saved === 0) {
-                    DB::connection('DATA_MYSQL')->rollBack();
-
                     return response()->json(['message' => 'Tidak ada data siswa yang berhasil diproses'], 422);
                 }
             } elseif ($request->metode == '2') {
                 $rows = array_filter($data, fn ($item) => !empty($item['nodaftar'] ?? null));
 
                 foreach ($rows as $item) {
+                    if ((int) ($item['status'] ?? 1) === 0) {
+                        continue;
+                    }
                     $item = $this->normalizeImportItem($item);
                     $lookupKey = $item['nodaftar'] ?? '';
 
@@ -308,48 +295,22 @@ class ExportImportDataController extends Controller
                     }
 
                     $existingCust = scctcust::where('NUM2ND', $item['nodaftar'])->first();
-                    $thnAka = mst_thn_aka::where('thn_aka', $item['angkatan'])->first();
-                    $kelas = mst_kelas::findForImport($item['unit'], $item['kelas'], $item['kelompok']);
-
-                    if (!$thnAka || !$kelas) {
-                        Log::warning('export_import_data.validateData.missing_reference', [
-                            'nis' => $item['nis'] ?? null,
-                            'nodaftar' => $item['nodaftar'] ?? null,
-                            'angkatan' => $item['angkatan'] ?? null,
-                            'unit' => $item['unit'] ?? null,
-                            'kelas' => $item['kelas'] ?? null,
-                            'kelompok' => $item['kelompok'] ?? null,
-                            'thn_aka_found' => (bool) $thnAka,
-                            'kelas_found' => (bool) $kelas,
-                            'sekolah' => $sekolah?->CODE01,
-                        ]);
-
-                        DB::connection('DATA_MYSQL')->rollBack();
-
-                        return response()->json([
-                            'message' => 'Silahkan periksa kembali kelas/thn_aka siswa',
-                            'thn_aka' => $thnAka,
-                            'kelas' => $kelas,
-                        ], 422);
-                    }
 
                     if (!$existingCust) {
                         if (!empty($item['nis'])) {
                             $existingNis = scctcust::where('NOCUST', $item['nis'])->first();
                             if ($existingNis) {
-                                DB::connection('DATA_MYSQL')->rollBack();
+                                $connection->rollBack();
 
                                 return response()->json(['message' => 'Gagal, siswa dengan NIS :' . $item['nis'] . ' sudah ada!'], 422);
                             }
                         }
 
-                        scctcust::create($this->buildScctcustPayload($item, $sekolah, $kelas, $thnAka));
+                        scctcust::create($this->buildScctcustPayload($item, $sekolah));
                     } else {
                         $existingCust->update($this->buildScctcustPayload(
                             $item,
                             $sekolah,
-                            $kelas,
-                            $thnAka,
                             true,
                             $existingCust,
                         ));
@@ -359,20 +320,21 @@ class ExportImportDataController extends Controller
                 $rows = array_filter($data, fn ($item) => !empty($item['nis'] ?? null));
 
                 foreach ($rows as $item) {
+                    if ((int) ($item['status'] ?? 1) === 0) {
+                        continue;
+                    }
                     $item = $this->normalizeImportItem($item);
                     if (strlen((string) ($item['nis'] ?? '')) > 10) {
                         continue;
                     }
 
                     $existingCust = scctcust::where('NOCUST', $item['nis'])->first();
-                    $kelas = mst_kelas::findForImport($item['unit'], $item['kelas'], $item['kelompok']);
 
-                    if ($existingCust && $kelas) {
+                    if ($existingCust) {
                         $existingCust->update([
-                            'CODE02' => $kelas->unit,
-                            'DESC02' => $kelas->jenjang,
-                            'CODE03' => $kelas->id,
-                            'DESC03' => $kelas->kelas,
+                            'CODE02' => $item['unit'] ?? null,
+                            'DESC02' => $item['kelas'] ?? null,
+                            'DESC03' => $item['kelompok'] ?? null,
                         ]);
                     }
                 }
@@ -390,7 +352,7 @@ class ExportImportDataController extends Controller
 
                     $existingNis = scctcust::where('NOCUST', $item['nis'])->first();
                     if ($existingNis) {
-                        DB::connection('DATA_MYSQL')->rollBack();
+                        $connection->rollBack();
 
                         return response()->json(['message' => 'Gagal, NIS :' . $item['nis'] . ' sudah ada!'], 422);
                     }
@@ -404,12 +366,16 @@ class ExportImportDataController extends Controller
                 }
             }
 
-            DB::connection('DATA_MYSQL')->commit();
+            if ($request->metode != '1' && $connection->transactionLevel() > 0) {
+                $connection->commit();
+            }
             Cache::forget($this->cacheKey);
 
             return response()->json(['message' => 'Sukses, data siswa telah disimpan, silahkan periksa kembali'], 200);
         } catch (\Throwable $e) {
-            DB::connection('DATA_MYSQL')->rollBack();
+            if ($connection->transactionLevel() > 0) {
+                $connection->rollBack();
+            }
 
             Log::error('export_import_data.validateData.failed', [
                 'metode' => $request->metode,
@@ -462,44 +428,9 @@ class ExportImportDataController extends Controller
         return $second !== '' ? $second : null;
     }
 
-    private function resolveSekolahForImport(?string $unit, ?mst_kelas $kelas): ?mst_sekolah
-    {
-        $unit = trim((string) $unit);
-
-        if ($unit !== '') {
-            $byUnit = mst_sekolah::query()
-                ->where(function ($query) use ($unit) {
-                    $query->where('DESC01', 'like', '%' . $unit . '%')
-                        ->orWhere('CODE01', $unit)
-                        ->orWhereRaw('UPPER(TRIM(DESC01)) = ?', [strtoupper($unit)]);
-                })
-                ->first();
-
-            if ($byUnit) {
-                return $byUnit;
-            }
-        }
-
-        if (!$kelas) {
-            return null;
-        }
-
-        $kelasUnit = trim((string) ($kelas->unit ?? ''));
-
-        return mst_sekolah::query()
-            ->where(function ($query) use ($kelasUnit) {
-                $query->where('DESC01', 'like', '%' . $kelasUnit . '%')
-                    ->orWhere('CODE01', $kelasUnit)
-                    ->orWhereRaw('UPPER(TRIM(DESC01)) = ?', [strtoupper($kelasUnit)]);
-            })
-            ->first();
-    }
-
     private function buildScctcustPayload(
         array $item,
         mst_sekolah $unit,
-        mst_kelas $kelas,
-        mst_thn_aka $thn_aka,
         bool $metodeByNodaftar = false,
         ?scctcust $existingCust = null,
     ): array {
@@ -510,12 +441,11 @@ class ExportImportDataController extends Controller
             'STCUST' => 1,
             'CODE01' => $unit->CODE01,
             'DESC01' => $unit->DESC01,
-            'CODE02' => $kelas->unit,
-            'DESC02' => $kelas->jenjang,
-            'CODE03' => $kelas->id,
-            'DESC03' => $kelas->kelas,
+            'CODE02' => $item['unit'] ?? null,
+            'DESC02' => $item['kelas'] ?? null,
+            'DESC03' => $item['kelompok'] ?? null,
             'CODE04' => $item['gender'] ?? null,
-            'DESC04' => $thn_aka->thn_aka,
+            'DESC04' => $item['angkatan'] ?? null,
             'DESC05' => $item['alamat'] ?? null,
             'GENUS' => $this->resolveOrtuForDb($item),
             'LastUpdate' => Carbon::now(),
