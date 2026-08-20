@@ -4,10 +4,9 @@ namespace App\Http\Controllers\Admin\Keuangan\TagihanSiswa;
 
 use App\Http\Controllers\Controller;
 use App\Imports\Keuangan\TagihanSiswa\ImportTagihanExcel;
-use App\Models\mst_tagihan;
-use App\Models\scctbill;
 use App\Models\scctcust;
 use App\Models\ValidationMessage;
+use App\Support\InputTagihanProcedure;
 use App\Support\SchoolScope;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -23,7 +22,7 @@ class UploadTagihanExcelController extends Controller
     public string $title = 'Keuangan';
     public string $mainTitle = 'Tagihan Siswa';
     public string $dataTitle = 'Buat Tagihan Excel';
-    public string $cacheKey = 'import_tagihan_excel';
+    public string $cacheKey = ImportTagihanExcel::CACHE_KEY;
 
     public ?string $sekolah = null;
 
@@ -46,12 +45,6 @@ class UploadTagihanExcelController extends Controller
         $data['columnsUrl'] = route('admin.keuangan.tagihan-siswa.upload-tagihan-excel.get-column');
         $data['datasUrl'] = route('admin.keuangan.tagihan-siswa.upload-tagihan-excel.get-data');
 
-        $currentYear = (int) date('Y');
-        $data['periode_tahun_list'] = range($currentYear - 2, $currentYear + 5);
-        $data['periode_tahun_default'] = $currentYear;
-        $data['periode_bulan_default'] = (int) date('m');
-        $data['tagihan'] = mst_tagihan::orderBy('urut', 'asc')->get();
-
         return view('admin.keuangan.tagihan_siswa.upload_tagihan_excel.index', $data);
     }
 
@@ -59,94 +52,62 @@ class UploadTagihanExcelController extends Controller
     {
         return [
             ['data' => null, 'name' => 'no', 'className' => 'text-center', 'columnType' => 'row'],
-            ['data' => 'nis', 'name' => 'NIS', 'searchable' => true, 'orderable' => true],
+            ['data' => 'nis', 'name' => 'NOCUST', 'searchable' => true, 'orderable' => true],
             ['data' => 'name', 'name' => 'NAMA', 'searchable' => true, 'orderable' => true],
+            ['data' => 'nmtagihan', 'name' => 'NMTagihan', 'searchable' => true, 'orderable' => true],
+            ['data' => 'billperiod', 'name' => 'BILLPERIOD', 'searchable' => true, 'orderable' => true],
+            ['data' => 'bta', 'name' => 'BTA', 'searchable' => true, 'orderable' => true],
+            ['data' => 'isnyicil', 'name' => 'isNYICIL', 'searchable' => true, 'orderable' => true, 'className' => 'text-center'],
+            ['data' => 'nominal', 'name' => 'NOMINAL', 'searchable' => true, 'orderable' => true, 'columnType' => 'currency'],
             ['data' => 'status', 'name' => 'Status', 'searchable' => true, 'orderable' => true, 'columnType' => 'importstatus'],
             ['data' => 'keterangan', 'name' => 'Keterangan', 'searchable' => true, 'orderable' => true],
             ['data' => 'unit', 'name' => 'Unit', 'searchable' => true, 'orderable' => true],
             ['data' => 'kelas', 'name' => 'Kelas', 'searchable' => true, 'orderable' => true],
-            ['data' => 'kelompok', 'name' => 'Kelompok', 'searchable' => true, 'orderable' => true],
-            ['data' => 'nominal', 'name' => 'Nominal', 'searchable' => true, 'orderable' => true, 'columnType' => 'currency'],
         ];
     }
 
     public function getData(Request $request)
     {
         $draw = $request->get('draw');
-        $start = $request->get('start');
-        $rowperpage = $request->get('length');
-
-        $columnName_arr = $request->get('columns');
-        $search_arr = $request->get('search');
-
-        $defaultColumn = 'scctcust.nocust';
-        $defaultOrder = 'asc';
-
-        $columnSortOrder = $defaultOrder;
-        $columnName = $defaultColumn;
-
-        if ($request->has('order')) {
-            $order = $request->get('order');
-            $columnIndex = (int) ($order[0]['column'] ?? 0);
-            $columnSortOrder = $order[0]['dir'] ?? $defaultOrder;
-            $requestedColumn = $columnName_arr[$columnIndex]['data'] ?? null;
-
-            if ($requestedColumn && $requestedColumn !== 'no') {
-                $columnName = 'scctcust.' . $requestedColumn;
-            }
-        }
-
-        $searchValue = $search_arr['value'] ?? '';
-
-        $filters = [];
-        $filterQuery = null;
 
         $cachedData = Cache::get($this->cacheKey, []);
-
-        $nisList = collect($cachedData)->pluck('nis')->toArray();
         $nisCount = count($cachedData);
 
-
-        $whereAny = [
+        $select = [
             'scctcust.NMCUST',
             'scctcust.NOCUST',
-        ];
-
-        $select = array_unique(array_merge($whereAny, [
-            'scctcust.NUM2ND',
             'scctcust.CODE02',
             'scctcust.DESC02',
-            'scctcust.DESC03',
-            'scctcust.DESC04',
-        ]));
+        ];
 
-        $records = collect($cachedData)->map(function ($item) use ($select){
-            $nis = $item['nis'];
+        $records = collect($cachedData)->map(function ($item) use ($select) {
+            $nis = (string) ($item['nocust'] ?? $item['nis'] ?? '');
             $siswa = scctcust::select($select)->where('scctcust.NOCUST', $nis);
             SchoolScope::apply($siswa, 'scctcust', $this->sekolah);
             $siswa = $siswa->first();
+
             return [
                 'nis' => $nis,
                 'name' => $siswa->NMCUST ?? null,
-                'ortu' => $item['ayah'] ?? null,
+                'nmtagihan' => $item['nmtagihan'] ?? null,
+                'billperiod' => $item['billperiod'] ?? null,
+                'bta' => $item['bta'] ?? null,
+                'isnyicil' => $item['isnyicil'] ?? null,
                 'unit' => $siswa->CODE02 ?? null,
                 'kelas' => $siswa->DESC02 ?? null,
-                'kelompok' => $siswa->DESC03 ?? null,
                 'nominal' => $item['nominal'] ?? null,
                 'status' => $item['status'] ?? 0,
-                'keterangan' => $item['keterangan'],
+                'keterangan' => $item['keterangan'] ?? null,
             ];
         });
 
-        $response = array(
+        return response()->json([
             'draw' => intval($draw),
             'recordsTotal' => $nisCount,
             'recordsFiltered' => $nisCount,
             'data' => $records,
-        );
-        return response()->json($response);
+        ]);
     }
-
 
     public function store(Request $request)
     {
@@ -168,34 +129,35 @@ class UploadTagihanExcelController extends Controller
 
         try {
             $headingsData = (new HeadingRowImport)->toArray($file);
-            $requiredColumns = ['nis', 'nama', 'unit', 'kelas', 'kelompok', 'angkatan', 'nominal'];
             if (empty($headingsData) || !isset($headingsData[0][0])) {
                 throw new \Exception('Tidak dapat membaca judul kolom dari file. Pastikan file memiliki header yang sesuai.');
             }
+
             $headings = array_map(
-                static fn ($heading) => strtolower(trim((string) $heading)),
+                static fn ($heading) => strtolower(preg_replace('/[^a-z0-9]+/i', '', (string) $heading) ?? (string) $heading),
                 $headingsData[0][0]
             );
+
+            $requiredColumns = ImportTagihanExcel::REQUIRED_COLUMNS;
             $missingColumns = [];
             foreach ($requiredColumns as $column) {
-                if (!in_array($column, $headings, true)) {
+                if (!in_array($column, $headings, true) && !($column === 'nocust' && in_array('nis', $headings, true))) {
                     $missingColumns[] = $column;
                 }
             }
 
             if (!empty($missingColumns)) {
-                $formattedMissingColumns = strtoupper(str_replace('_', ' ', implode(', ', $missingColumns)));
-                $formattedRequiredColumns = strtoupper(str_replace('_', ' ', implode(', ', $requiredColumns)));
+                $formattedMissingColumns = implode(', ', array_map([$this, 'displayColumn'], $missingColumns));
+                $formattedRequiredColumns = implode(', ', array_map([$this, 'displayColumn'], $requiredColumns));
                 throw new \Exception("Kolom $formattedMissingColumns tidak ditemukan.<br><hr> pastikan kolom berikut ada dan terisi pada file import yang akan diproses: $formattedRequiredColumns.");
             }
 
-            DB::beginTransaction();
-            Excel::import(new ImportTagihanExcel(), $file);
-            DB::commit();
+            Cache::forget($this->cacheKey);
+            Excel::import(new ImportTagihanExcel($this->sekolah), $file);
 
             $data = Cache::get($this->cacheKey, []);
             if (empty($data)) {
-                throw new \Exception('File berhasil dibaca, tetapi tidak ada baris data yang dapat diproses. Pastikan file berisi NIS dan Nominal.');
+                throw new \Exception('File berhasil dibaca, tetapi tidak ada baris data yang dapat diproses. Pastikan file berisi NOCUST dan Nominal.');
             }
 
             Log::info('Upload tagihan excel berhasil', [
@@ -206,7 +168,6 @@ class UploadTagihanExcelController extends Controller
 
             return response()->json(['message' => 'Sukses, data tagihan telah diimport, silahkan periksa kembali', 'data' => $data], 200);
         } catch (ValidationException $e) {
-            DB::rollBack();
             $errorMessages = $e->errors();
             $errorMessage = $errorMessages['error'][0] ?? 'Terjadi kesalahan saat melakukan import data.';
 
@@ -218,8 +179,6 @@ class UploadTagihanExcelController extends Controller
 
             return response()->json(['message' => $errorMessage, 'error' => $errorMessages], 422);
         } catch (\Throwable $e) {
-            DB::rollBack();
-
             Log::error('Upload tagihan excel gagal', [
                 'user_id' => auth()->id(),
                 'file_name' => $file?->getClientOriginalName(),
@@ -236,75 +195,68 @@ class UploadTagihanExcelController extends Controller
         }
     }
 
-    public function validateExcel(Request $request)
+    public function validateExcel()
     {
-        $request->validate([
-            'tagihan' => ['required'],
-            'periode_tahun' => ['required', 'integer', 'digits:4', 'min:2000', 'max:2099'],
-            'periode_bulan' => ['required', 'integer', 'min:1', 'max:12'],
-        ], ValidationMessage::messages(), ValidationMessage::attributes());
-
         $data = Cache::get($this->cacheKey);
-        if (empty($data))return response()->json(['message' => 'Silahkan import data tagihan terlebih dahulu'], 422);
+        if (empty($data)) {
+            return response()->json(['message' => 'Silahkan import data tagihan terlebih dahulu'], 422);
+        }
 
-        $bta = sprintf('%04d%02d', (int) $request->periode_tahun, (int) $request->periode_bulan);
-
-        $tagihan = mst_tagihan::where('urut', $request->tagihan)->first();
-        if (!$tagihan) return response()->json(['message' => 'Tagihan tidak ditemukan, silahkan muat ulang halaman!'], 422);
+        $connection = DB::connection('DATA_MYSQL');
 
         try {
-            DB::beginTransaction();
+            $connection->beginTransaction();
             $skippedInactive = [];
+            $skippedInvalid = [];
             $insertedCount = 0;
+
             foreach ($data as $item) {
-                if ($item['status'] != 1) continue;
-                $siswa = scctcust::where('NOCUST', $item['nis']);
-                SchoolScope::apply($siswa, 'scctcust', $this->sekolah);
-                $siswa = $siswa->first();
-                if (!$siswa) return response()->json(['message' => "siswa dengan nis: {$item['nis']} tidak ditemukan!"], 422);
-                if ((int) ($siswa->STCUST ?? 0) === 0) {
-                    $skippedInactive[] = trim(($item['nis'] ?? '-') . ' - ' . ($siswa->NMCUST ?? 'Tanpa Nama'));
+                if ((int) ($item['status'] ?? 0) !== 1) {
+                    $skippedInvalid[] = trim(($item['nocust'] ?? $item['nis'] ?? '-') . ' - ' . ($item['keterangan'] ?? 'Data tidak valid'));
                     continue;
                 }
 
-                $tagihanSiswaTerbaru = scctbill::where('CUSTID', $siswa->CUSTID)
-                    ->orderBy('FUrutan', 'DESC')
-                    ->first();
+                $nocust = trim((string) ($item['nocust'] ?? $item['nis'] ?? ''));
+                $siswa = scctcust::where('NOCUST', $nocust);
+                SchoolScope::apply($siswa, 'scctcust', $this->sekolah);
+                $siswa = $siswa->first();
+                if (!$siswa) {
+                    $connection->rollBack();
 
-                $urut = $tagihanSiswaTerbaru ? $tagihanSiswaTerbaru['FUrutan'] + 1 : 1;
-                $billCD = date('Y') . '/i' . date('m') . '-' . ($urut + 1);
-                $nominal = (int) $item['nominal'];
+                    return response()->json(['message' => "siswa dengan nocust: {$nocust} tidak ditemukan!"], 422);
+                }
 
-                scctbill::create([
-                    'CUSTID' => $siswa->CUSTID,
-                    'BILLAC' => $bta,
-                    'BILLNM' => $tagihan->tagihan,
-                    'BILLAM' => $nominal,
-                    'BILLPAID' => 0,
-                    'PAYMENTLEFT' => $nominal,
-                    'PAIDST' => 0,
-                    'FUrutan' => $urut,
-                    'FTGLTagihan' => now(),
-                    'FSTSBolehBayar' => 1,
-                    'BTA' => $bta,
-                    'BILLCD' => $billCD,
-                    'INSTALLMENT' => 0,
-                    'isINSTALLABLE' => (int) ($tagihan->isINSTALLMENT ?? 0),
-                ]);
+                if ((int) ($siswa->STCUST ?? 0) === 0) {
+                    $skippedInactive[] = trim($nocust . ' - ' . ($siswa->NMCUST ?? 'Tanpa Nama'));
+                    continue;
+                }
+
+                InputTagihanProcedure::call(
+                    $nocust,
+                    (int) ($item['nominal'] ?? 0),
+                    (string) ($item['nmtagihan'] ?? ''),
+                    (string) ($item['billperiod'] ?? ''),
+                    (string) ($item['bta'] ?? ''),
+                    (string) ($item['isnyicil'] ?? ''),
+                );
                 $insertedCount++;
             }
 
             Cache::forget($this->cacheKey);
+            $connection->commit();
 
-            DB::commit();
-            $message = "Data tagihan disimpan! Berhasil dibuat untuk {$insertedCount} siswa.";
+            $message = "Data tagihan disimpan! Berhasil dibuat untuk {$insertedCount} siswa lewat procedure InputTagihan.";
             if (!empty($skippedInactive)) {
                 $message .= '<hr>Tagihan tidak dibuat untuk siswa nonaktif (STCUST=0): ' . count($skippedInactive) . ' siswa.<br>' .
                     implode('<br>', $skippedInactive);
             }
+            if (!empty($skippedInvalid)) {
+                $message .= '<hr>Baris tidak diproses karena data tidak valid: ' . count($skippedInvalid) . ' baris.';
+            }
+
             return response()->json(['message' => $message], 200);
         } catch (\Throwable $e) {
-            DB::rollBack();
+            $connection->rollBack();
 
             Log::error('Simpan tagihan excel gagal', [
                 'user_id' => auth()->id(),
@@ -317,5 +269,18 @@ class UploadTagihanExcelController extends Controller
                 'error' => $e->getMessage(),
             ], 422);
         }
+    }
+
+    private function displayColumn(string $column): string
+    {
+        return match ($column) {
+            'nocust' => 'NOCUST',
+            'nominal' => 'NOMINAL',
+            'nmtagihan' => 'NMTagihan',
+            'billperiod' => 'BILLPERIOD',
+            'bta' => 'BTA',
+            'isnyicil' => 'isNYICIL',
+            default => strtoupper($column),
+        };
     }
 }
