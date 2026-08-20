@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Admin\MasterData;
 
 use App\Http\Controllers\Controller;
 use App\Imports\MasterData\ImportDataSiswa;
-use App\Models\mst_sekolah;
 use App\Models\scctcust;
 use App\Models\ValidationMessage;
 use App\Support\InputSiswaProcedure;
@@ -33,12 +32,6 @@ class ExportImportDataController extends Controller
         $data['dataTitle'] = $this->dataTitle;
         $data['columnsUrl'] = route('admin.master-data.export-import-data.get-column');
         $data['datasUrl'] = route('admin.master-data.export-import-data.get-data');
-        $schoolCode = SchoolScope::codeFromUser();
-        $data['sekolah'] = mst_sekolah::query()
-            ->select(['CODE01', 'DESC01'])
-            ->when($schoolCode, fn ($q) => $q->where('CODE01', $schoolCode))
-            ->orderBy('DESC01')
-            ->get();
 
         return view('admin.master_data.export_import_data.index', $data);
     }
@@ -210,9 +203,6 @@ class ExportImportDataController extends Controller
         $rules = [
             'metode' => ['required', 'in:1,2,3,4'],
         ];
-        if (in_array($request->metode, ['1', '2'], true)) {
-            $rules['sekolah'] = ['required', 'string'];
-        }
 
         $request->validate(
             $rules,
@@ -223,14 +213,6 @@ class ExportImportDataController extends Controller
         $data = Cache::get($this->cacheKey);
         if (is_null($data) || (is_array($data) && empty($data))) {
             return response()->json(['message' => 'Tidak ada data yang dapat diproses, silahkan upload file terlebih dahulu'], 422);
-        }
-
-        $sekolah = null;
-        if (in_array($request->metode, ['1', '2'], true)) {
-            $sekolah = mst_sekolah::where('CODE01', $request->sekolah)->first();
-            if (!$sekolah) {
-                return response()->json(['message' => 'Sekolah tidak ditemukan, silahkan pilih sekolah yang valid'], 422);
-            }
         }
 
         $connection = DB::connection('DATA_MYSQL');
@@ -266,7 +248,7 @@ class ExportImportDataController extends Controller
                         (string) ($item['nama'] ?? ''),
                         (string) ($item['kelas'] ?? ''),
                         (string) ($item['unit'] ?? ''),
-                        (string) ($sekolah->CODE01 ?? ''),
+                        $this->resolveSchoolCode($item),
                         (string) ($item['kelompok'] ?? ''),
                         (string) ($item['angkatan'] ?? ''),
                         $item['alamat'] ?? null,
@@ -306,11 +288,10 @@ class ExportImportDataController extends Controller
                             }
                         }
 
-                        scctcust::create($this->buildScctcustPayload($item, $sekolah));
+                        scctcust::create($this->buildScctcustPayload($item));
                     } else {
                         $existingCust->update($this->buildScctcustPayload(
                             $item,
-                            $sekolah,
                             true,
                             $existingCust,
                         ));
@@ -428,19 +409,25 @@ class ExportImportDataController extends Controller
         return $second !== '' ? $second : null;
     }
 
+    private function resolveSchoolCode(array $item): string
+    {
+        return SchoolScope::codeFromUser() ?: trim((string) ($item['unit'] ?? ''));
+    }
+
     private function buildScctcustPayload(
         array $item,
-        mst_sekolah $unit,
         bool $metodeByNodaftar = false,
         ?scctcust $existingCust = null,
     ): array {
+        $code01 = $this->resolveSchoolCode($item);
+
         $payload = [
             'NOCUST' => $item['nis'] ?? '-',
             'NMCUST' => $item['nama'],
             'NUM2ND' => $item['nodaftar'] ?? '-',
             'STCUST' => 1,
-            'CODE01' => $unit->CODE01,
-            'DESC01' => $unit->DESC01,
+            'CODE01' => $code01,
+            'DESC01' => $code01,
             'CODE02' => $item['unit'] ?? null,
             'DESC02' => $item['kelas'] ?? null,
             'DESC03' => $item['kelompok'] ?? null,
