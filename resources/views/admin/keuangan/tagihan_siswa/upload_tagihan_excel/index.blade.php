@@ -151,7 +151,7 @@
                             <span class="ri-save-line ri-48px"></span>
                             <h3>Simpan Data Tagihan Siswa?</h3>
                             <div class="">
-                                Data valid akan dikirim ke procedure InputTagihan.
+                                Data yang valid akan disimpan sebagai tagihan siswa.
                             </div>
                         </div>
                     </div>

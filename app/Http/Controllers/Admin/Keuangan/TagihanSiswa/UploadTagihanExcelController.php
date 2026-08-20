@@ -217,7 +217,7 @@ class UploadTagihanExcelController extends Controller
                 SchoolScope::apply($siswa, 'scctcust', $this->sekolah);
                 $siswa = $siswa->first();
                 if (!$siswa) {
-                    return response()->json(['message' => "siswa dengan nocust: {$nocust} tidak ditemukan!"], 422);
+                    return response()->json(['message' => "Siswa dengan NOCUST {$nocust} tidak ditemukan."], 422);
                 }
 
                 if ((int) ($siswa->STCUST ?? 0) === 0) {
@@ -238,9 +238,9 @@ class UploadTagihanExcelController extends Controller
 
             Cache::forget($this->cacheKey);
 
-            $message = "Data tagihan disimpan! Berhasil dibuat untuk {$insertedCount} siswa lewat procedure InputTagihan.";
+            $message = "Data tagihan disimpan. Berhasil dibuat untuk {$insertedCount} siswa.";
             if (!empty($skippedInactive)) {
-                $message .= '<hr>Tagihan tidak dibuat untuk siswa nonaktif (STCUST=0): ' . count($skippedInactive) . ' siswa.<br>' .
+                $message .= '<hr>Tagihan tidak dibuat untuk siswa nonaktif: ' . count($skippedInactive) . ' siswa.<br>' .
                     implode('<br>', $skippedInactive);
             }
             if (!empty($skippedInvalid)) {
@@ -256,8 +256,7 @@ class UploadTagihanExcelController extends Controller
             ]);
 
             return response()->json([
-                'message' => 'Terjadi kesalahan saat menyimpan data.<hr>' . $e->getMessage(),
-                'error' => $e->getMessage(),
+                'message' => 'Terjadi kesalahan saat menyimpan data. Silakan coba lagi.',
             ], 422);
         }
     }
