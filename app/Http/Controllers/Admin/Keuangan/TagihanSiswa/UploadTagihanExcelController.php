@@ -11,7 +11,6 @@ use App\Support\SchoolScope;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Facades\Excel;
 use Maatwebsite\Excel\HeadingRowImport;
@@ -202,10 +201,7 @@ class UploadTagihanExcelController extends Controller
             return response()->json(['message' => 'Silahkan import data tagihan terlebih dahulu'], 422);
         }
 
-        $connection = DB::connection('DATA_MYSQL');
-
         try {
-            $connection->beginTransaction();
             $skippedInactive = [];
             $skippedInvalid = [];
             $insertedCount = 0;
@@ -221,8 +217,6 @@ class UploadTagihanExcelController extends Controller
                 SchoolScope::apply($siswa, 'scctcust', $this->sekolah);
                 $siswa = $siswa->first();
                 if (!$siswa) {
-                    $connection->rollBack();
-
                     return response()->json(['message' => "siswa dengan nocust: {$nocust} tidak ditemukan!"], 422);
                 }
 
@@ -243,7 +237,6 @@ class UploadTagihanExcelController extends Controller
             }
 
             Cache::forget($this->cacheKey);
-            $connection->commit();
 
             $message = "Data tagihan disimpan! Berhasil dibuat untuk {$insertedCount} siswa lewat procedure InputTagihan.";
             if (!empty($skippedInactive)) {
@@ -256,8 +249,6 @@ class UploadTagihanExcelController extends Controller
 
             return response()->json(['message' => $message], 200);
         } catch (\Throwable $e) {
-            $connection->rollBack();
-
             Log::error('Simpan tagihan excel gagal', [
                 'user_id' => auth()->id(),
                 'message' => $e->getMessage(),
