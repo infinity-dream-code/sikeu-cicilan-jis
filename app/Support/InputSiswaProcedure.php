@@ -8,8 +8,10 @@ use Illuminate\Support\Facades\Log;
 class InputSiswaProcedure
 {
     /**
-     * @see InputSiswa(p_NIMRAW, p_NMCUSTRAW, p_DESC02, p_CODE02, p_CODE01,
-     *      p_DESC03, p_DESC04, p_DESC05, p_CODE04, p_GENUS, p_CODE05)
+     * Excel → InputSiswa:
+     * NIS → p_NIMRAW, Nama → p_NMCUSTRAW, Kelas → p_DESC02,
+     * Unit → p_CODE02 & p_CODE01, Kelompok → p_DESC03, Angkatan → p_DESC04,
+     * Alamat → p_DESC05, Gender → p_CODE04, Ortu → p_GENUS.
      */
     public static function call(
         string $nimRaw,
@@ -27,17 +29,17 @@ class InputSiswaProcedure
         $pdo = DB::connection('DATA_MYSQL')->getPdo();
         $stmt = $pdo->prepare('CALL InputSiswa(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
         $stmt->execute([
-            $nimRaw,
-            $namaRaw,
-            $desc02,
-            $code02,
-            $code01,
-            $desc03,
-            $angkatan,
-            (string) ($alamat ?? ''),
-            (string) ($gender ?? ''),
-            (string) ($ortu ?? ''),
-            (string) ($code05 ?? ''),
+            self::limit($nimRaw, 15),
+            self::limit($namaRaw, 70),
+            self::limit($desc02, 50),
+            self::limit($code02, 50),
+            self::limit($code01, 5),
+            self::limit($desc03, 50),
+            self::limit($angkatan, 50),
+            self::limit((string) ($alamat ?? ''), 250),
+            self::limit((string) ($gender ?? ''), 5),
+            self::limit((string) ($ortu ?? ''), 50),
+            self::limit((string) ($code05 ?? ''), 5),
         ]);
 
         do {
@@ -49,8 +51,19 @@ class InputSiswaProcedure
             'unit' => $code02,
             'kelas' => $desc02,
             'kelompok' => $desc03,
-            'sekolah' => $code01,
+            'code01' => $code01,
             'angkatan' => $angkatan,
         ]);
+    }
+
+    private static function limit(string $value, int $max): string
+    {
+        $value = trim($value);
+
+        if ($value === '' || mb_strlen($value) <= $max) {
+            return $value;
+        }
+
+        return mb_substr($value, 0, $max);
     }
 }

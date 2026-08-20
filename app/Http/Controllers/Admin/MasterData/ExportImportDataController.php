@@ -7,7 +7,6 @@ use App\Imports\MasterData\ImportDataSiswa;
 use App\Models\scctcust;
 use App\Models\ValidationMessage;
 use App\Support\InputSiswaProcedure;
-use App\Support\SchoolScope;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Http\Request;
@@ -239,7 +238,7 @@ class ExportImportDataController extends Controller
                 foreach ($rows as $item) {
                     $item = $this->normalizeImportItem($item);
                     $nis = (string) ($item['nis'] ?? '');
-                    if ($nis === '' || strlen($nis) > 15) {
+                    if ($nis === '') {
                         continue;
                     }
 
@@ -248,7 +247,7 @@ class ExportImportDataController extends Controller
                         (string) ($item['nama'] ?? ''),
                         (string) ($item['kelas'] ?? ''),
                         (string) ($item['unit'] ?? ''),
-                        $this->resolveSchoolCode($item),
+                        (string) ($item['unit'] ?? ''),
                         (string) ($item['kelompok'] ?? ''),
                         (string) ($item['angkatan'] ?? ''),
                         $item['alamat'] ?? null,
@@ -411,7 +410,7 @@ class ExportImportDataController extends Controller
 
     private function resolveSchoolCode(array $item): string
     {
-        return SchoolScope::codeFromUser() ?: trim((string) ($item['unit'] ?? ''));
+        return mb_substr(trim((string) ($item['unit'] ?? '')), 0, 5);
     }
 
     private function buildScctcustPayload(
